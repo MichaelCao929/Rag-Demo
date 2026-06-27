@@ -2,12 +2,14 @@
 
 A Retrieval-Augmented Generation (RAG) pipeline for querying healthcare and compliance documents using natural language. Built with LangChain, ChromaDB, and Claude (Anthropic).
 
-Three runnable entry points, from simple to advanced:
+Four runnable entry points, from simple to advanced:
 
-| Script | What it does |
-|--------|-------------|
+| Entry point | What it does |
+|-------------|-------------|
 | `query.py` | Simple RAG chain — LCEL retriever → Claude |
 | `agent.py` | ReAct agent — native Anthropic tool_use loop |
+| `mcp_server.py` | MCP Server — exposes tools to any MCP client |
+| `backend/` + `frontend/` | **Full-stack web app** — React + FastAPI with streaming UI |
 | `mcp_server.py` | MCP Server — exposes tools to any MCP-compatible client |
 
 ---
@@ -70,6 +72,26 @@ ChromaDB + Claude API
     ↓
 Tool result → client
 ```
+
+### Layer 4 — Full-stack Web App (`backend/` + `frontend/`)
+
+A React + FastAPI web interface for the same RAG pipeline, with streaming responses and drag-and-drop PDF upload.
+
+```
+React + TypeScript (Vite)       ← frontend/
+    ↕ HTTP + SSE (streaming)
+FastAPI                          ← backend/main.py
+    ↕
+ChromaDB + AsyncAnthropic
+    ↓
+Streaming answer with citations → UI in real time
+```
+
+Features:
+- **PDF upload** — drag & drop or click to index new documents
+- **Streaming chat** — tokens stream to the UI in real time via Server-Sent Events
+- **Source citations** — every answer shows which file and page it came from
+- **Auto-suggestions** — empty state shows quick-start questions
 
 ---
 
@@ -151,21 +173,57 @@ python mcp_server.py
 
 Once connected, Claude Desktop can call `search_documents`, `list_sources`, `get_chunk_count`, and `get_current_date` directly.
 
+### Web App
+
+**Development (two terminals):**
+
+```bash
+# Terminal 1 — backend
+source venv/bin/activate  # or venv\Scripts\activate on Windows
+uvicorn backend.main:app --reload
+
+# Terminal 2 — frontend
+cd frontend
+npm install
+npm run dev
+```
+
+Open [http://localhost:5173](http://localhost:5173). Upload a PDF from the sidebar, then ask questions.
+
+**Production (Docker Compose):**
+
+```bash
+docker compose up --build
+```
+
+Open [http://localhost:5173](http://localhost:5173).
+
 ---
 
 ## File structure
 
 ```
 rag-demo/
-├── ingest.py          # PDF → ChromaDB ingestion
-├── query.py           # Simple LCEL RAG chain
-├── tools.py           # Tool definitions (raw fns + @tool wrappers + TOOL_SCHEMAS)
-├── agent.py           # Anthropic native ReAct tool_use loop
-├── mcp_server.py      # FastMCP server (MCP protocol)
-├── chroma_db/         # Persisted vector store (git-ignored)
-├── docs/              # Source PDFs
+├── backend/
+│   └── main.py            # FastAPI: /api/upload, /api/chat (SSE), /api/sources
+├── frontend/
+│   ├── src/
+│   │   ├── App.tsx
+│   │   └── components/
+│   │       ├── Sidebar.tsx       # Document list + drag-and-drop upload
+│   │       ├── ChatWindow.tsx    # Input + message feed
+│   │       └── MessageBubble.tsx # User/assistant bubbles + source citations
+│   └── ...
+├── ingest.py              # CLI: PDF → ChromaDB ingestion
+├── query.py               # CLI: simple LCEL RAG chain
+├── tools.py               # Tool definitions (raw fns + @tool wrappers + TOOL_SCHEMAS)
+├── agent.py               # CLI: Anthropic native ReAct tool_use loop
+├── mcp_server.py          # MCP Server via FastMCP
+├── docker-compose.yml
+├── chroma_db/             # Persisted vector store (git-ignored)
+├── docs/                  # Source PDFs
 ├── requirements.txt
-└── .env               # ANTHROPIC_API_KEY (git-ignored)
+└── .env                   # ANTHROPIC_API_KEY (git-ignored)
 ```
 
 ---
@@ -177,12 +235,12 @@ rag-demo/
 - **Vector store:** ChromaDB persists to disk; no re-embedding needed across sessions.
 - **Agent layer:** Anthropic SDK directly rather than LangChain agents — the `tool_use` loop is 30 lines and fully transparent. Easier to debug, extend, and reason about than framework abstractions.
 - **MCP layer:** FastMCP adds one `@mcp.tool()` decorator per function — zero boilerplate. The server runs over stdio so any MCP client connects without network config.
-- **LLM:** Claude Haiku for cost-efficient answers; swap to `claude-sonnet-4-6` in `agent.py` for harder reasoning tasks.
+- **Streaming:** FastAPI `StreamingResponse` with SSE + `AsyncAnthropic` client; the frontend reads chunks via `fetch` + `ReadableStream` — no WebSocket needed.
+- **LLM:** Claude Haiku for cost-efficient answers; swap to `claude-sonnet-4-6` in `agent.py` / `backend/main.py` for harder reasoning tasks.
 
 ## Potential extensions
 
-- Streaming responses via `client.messages.stream()` for real-time UI feedback
 - Multi-tenant support (separate ChromaDB collections per user/project)
 - Reranking with a cross-encoder for higher retrieval precision
 - Evaluation framework (RAGAS) to measure retrieval and answer quality
-- Flask/FastAPI REST endpoint wrapping `agent.py` for web integration
+- Auth layer (JWT) to protect the `/api/upload` endpoint
