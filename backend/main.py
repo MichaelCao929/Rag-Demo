@@ -82,11 +82,15 @@ async def sources():
 @app.delete("/api/sources/{filename}")
 async def delete_source(filename: str):
     vs = get_vectorstore()
-    result = vs.get(where={"source": {"$contains": filename}})
-    if not result["ids"]:
+    data = vs.get()
+    ids_to_delete = [
+        id_ for id_, meta in zip(data["ids"], data["metadatas"])
+        if meta and os.path.basename(meta.get("source", "")) == filename
+    ]
+    if not ids_to_delete:
         raise HTTPException(status_code=404, detail=f"No chunks found for '{filename}'.")
-    vs.delete(ids=result["ids"])
-    return {"filename": filename, "deleted_chunks": len(result["ids"])}
+    vs.delete(ids=ids_to_delete)
+    return {"filename": filename, "deleted_chunks": len(ids_to_delete)}
 
 
 @app.post("/api/upload")

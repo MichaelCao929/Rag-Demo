@@ -30,8 +30,12 @@ export default function App() {
   }, [])
 
   const deleteDocument = async (filename: string) => {
-    await fetch(`/api/sources/${encodeURIComponent(filename)}`, { method: 'DELETE' })
-    fetchDocuments()
+    const res = await fetch(`/api/sources/${encodeURIComponent(filename)}`, { method: 'DELETE' })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      throw new Error(data.detail ?? `Delete failed (${res.status})`)
+    }
+    await fetchDocuments()
   }
 
   useEffect(() => { fetchDocuments() }, [fetchDocuments])
