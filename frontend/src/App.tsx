@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import Sidebar from './components/Sidebar'
 import ChatWindow from './components/ChatWindow'
 
-export type Source = { file: string; page: number | string }
+export type Source = { file: string; page: number | string; text?: string }
 
 export type Message = {
   id: string
@@ -15,6 +15,7 @@ export type Message = {
 export default function App() {
   const [messages, setMessages] = useState<Message[]>([])
   const [documents, setDocuments] = useState<string[]>([])
+  const [chunkCount, setChunkCount] = useState(0)
   const [loading, setLoading] = useState(false)
 
   const fetchDocuments = useCallback(async () => {
@@ -22,10 +23,16 @@ export default function App() {
       const res = await fetch('/api/sources')
       const data = await res.json()
       setDocuments(data.documents ?? [])
+      setChunkCount(data.chunk_count ?? 0)
     } catch {
       /* backend not ready yet */
     }
   }, [])
+
+  const deleteDocument = async (filename: string) => {
+    await fetch(`/api/sources/${encodeURIComponent(filename)}`, { method: 'DELETE' })
+    fetchDocuments()
+  }
 
   useEffect(() => { fetchDocuments() }, [fetchDocuments])
 
@@ -100,10 +107,16 @@ export default function App() {
 
   return (
     <div className="flex h-screen bg-slate-50 font-sans overflow-hidden">
-      <Sidebar documents={documents} onUploadComplete={fetchDocuments} />
+      <Sidebar
+        documents={documents}
+        chunkCount={chunkCount}
+        onUploadComplete={fetchDocuments}
+        onDelete={deleteDocument}
+      />
       <ChatWindow
         messages={messages}
         onSend={sendMessage}
+        onClear={() => setMessages([])}
         loading={loading}
         hasDocuments={documents.length > 0}
       />

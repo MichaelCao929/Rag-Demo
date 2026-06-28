@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect, KeyboardEvent } from 'react'
-import { Send, BookOpen } from 'lucide-react'
+import { Send, BookOpen, Trash2 } from 'lucide-react'
 import MessageBubble from './MessageBubble'
 import type { Message } from '../App'
 
 type Props = {
   messages: Message[]
   onSend: (question: string) => void
+  onClear: () => void
   loading: boolean
   hasDocuments: boolean
 }
@@ -16,7 +17,7 @@ const SUGGESTIONS = [
   'What are the eligibility criteria?',
 ]
 
-export default function ChatWindow({ messages, onSend, loading, hasDocuments }: Props) {
+export default function ChatWindow({ messages, onSend, onClear, loading, hasDocuments }: Props) {
   const [input, setInput] = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -53,8 +54,20 @@ export default function ChatWindow({ messages, onSend, loading, hasDocuments }: 
       <header className="bg-white border-b border-slate-200 px-6 py-3.5 flex items-center gap-2 shadow-sm">
         <BookOpen size={16} className="text-navy" />
         <h1 className="text-sm font-semibold text-slate-800">Document Q&amp;A</h1>
-        <span className="ml-auto text-xs text-slate-400">
-          {hasDocuments ? 'Ready' : 'Upload a PDF to begin'}
+        <span className="ml-auto flex items-center gap-3">
+          <span className="text-xs text-slate-400">
+            {hasDocuments ? 'Ready' : 'Upload a PDF to begin'}
+          </span>
+          {messages.length > 0 && (
+            <button
+              onClick={onClear}
+              title="Clear conversation"
+              className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-red-500 transition-colors px-2 py-1 rounded-md hover:bg-red-50"
+            >
+              <Trash2 size={13} />
+              Clear
+            </button>
+          )}
         </span>
       </header>
 

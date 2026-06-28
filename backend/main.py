@@ -67,8 +67,26 @@ def list_indexed_docs() -> list[str]:
 
 @app.get("/api/sources")
 async def sources():
-    docs = list_indexed_docs()
-    return {"documents": docs, "count": len(docs)}
+    try:
+        data = get_vectorstore().get()
+        docs = sorted({
+            os.path.basename(m.get("source", "unknown"))
+            for m in data["metadatas"] if m
+        })
+        chunk_count = len(data["ids"])
+    except Exception:
+        docs, chunk_count = [], 0
+    return {"documents": docs, "count": len(docs), "chunk_count": chunk_count}
+
+
+@app.delete("/api/sources/{filename}")
+async def delete_source(filename: str):
+    vs = get_vectorstore()
+    result = vs.get(where={"source": {"$contains": filename}})
+    if not result["ids"]:
+        raise HTTPException(status_code=404, detail=f"No chunks found for '{filename}'.")
+    vs.delete(ids=result["ids"])
+    return {"filename": filename, "deleted_chunks": len(result["ids"])}
 
 
 @app.post("/api/upload")
@@ -115,8 +133,9 @@ async def chat(body: ChatRequest):
     for i, doc in enumerate(docs, 1):
         fname = os.path.basename(doc.metadata.get("source", "unknown"))
         page = doc.metadata.get("page", "?")
-        sources.append({"file": fname, "page": page})
-        context_parts.append(f"[{i}] {fname} (page {page})\n{doc.page_content.strip()}")
+        chunk_text = doc.page_content.strip()
+        sources.append({"file": fname, "page": page, "text": chunk_text[:400]})
+        context_parts.append(f"[{i}] {fname} (page {page})\n{chunk_text}")
 
     context = "\n\n---\n\n".join(context_parts) if context_parts else "No documents are indexed yet."
 
